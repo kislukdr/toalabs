@@ -2,6 +2,7 @@
 #include <iomanip>
 #include <vector>
 #include <chrono>
+#include <cstdint>
 
 
 using std::chrono::time_point;
@@ -10,56 +11,39 @@ using std::chrono::duration_cast;
 using std::chrono::nanoseconds;
 
 
-class Time {
+class Timer {
     time_point <high_resolution_clock> begin;
     time_point <high_resolution_clock> end;
-    unsigned long long time_ns;
 public:
-    void clear() { time_ns = 0; }
     void start() { begin = high_resolution_clock::now(); }
-    void finish() {
+    uint64_t finish() {
         end = high_resolution_clock::now();
         nanoseconds duration = duration_cast <nanoseconds> (end - begin);
-        time_ns = duration.count();
+        return duration.count();
     }
-    void print();
-    Time() { time_ns = 0; }
+    static void print(uint64_t time_ns);
 };
 
 
 class Primes {
-    int last_n;
     std::vector <int> values;
-    std::vector <Time> times;
+    std::vector <uint64_t> times;
     bool is_prime(int value);
-    void add(int n, int additive);
 public:
     int get(int i) { return values[i]; }
     void clear_time() {
         for (int i = 0; i < times.size(); i++)
-            times[i].clear();
+            times[i] = 0;
     }
-    void print_time() {
-        std::cout << std::endl;
-        for (int i = 0; i < times.size(); i++) {
-            std::cout << std::setw(4) << values[i] << " | ";
-            times[i].print();
-            std::cout << std::endl;
-        }
-    }
+    void print_time();
     void expand_to(int value);
     bool print(int* i, int limit); // true - limit reached
-    Primes() {
-        last_n = 0;
-        values = { 2, 3 };
-        times = { Time(), Time() };
-    }
 };
 
 
 int main() {
-    Time total_time;
-    total_time.start();
+    Timer total_timer;
+    total_timer.start();
 
     Primes primes;
     int limit;
@@ -78,30 +62,33 @@ int main() {
         }
 
         primes.clear_time();
-        int i = 1;
-        std::cout << "[2";
+        int i = 0;
+        std::cout << "in memory: ";
         bool limit_reached = primes.print(&i, limit);
-        std::cout << "]";
+        std::cout << std::endl << "calculated: ";
         if (!limit_reached) {
             primes.expand_to(limit);
-            if (primes.get(i) <= limit)
-                primes.print(&i, limit);
+            primes.print(&i, limit);
         }
         std::cout << std::endl;
         primes.print_time();
     }
 
-    total_time.finish();
     std::cout << "Total time: ";
-    total_time.print();
+    Timer::print(total_timer.finish());
     std::cout << std::endl;
     return 0;
 }
 
 
 bool Primes::is_prime(int value) {
-    // no %2 checking: (6n+-1)%2 = 1
+    if (value <= 1)
+        return false;
     int root = (int)sqrt(value);
+    if (value == 2)
+        return true;
+    if (value % 2 == 0)
+        return false;
     for (int i = 3; i <= root; i += 2)
         if (value % i == 0)
             return false;
@@ -109,24 +96,30 @@ bool Primes::is_prime(int value) {
 }
 
 
-void Primes::add(int n, int additive) {
-    Time time;
-    time.start();
-    int value = 6*n + additive;
-    bool value_is_prime = is_prime(value);
-    time.finish();
-    if (value_is_prime) {
-        values.push_back(value);
-        times.push_back(time);
+void Primes::expand_to(int value) {
+    int i = 0;
+    Timer timer;
+    timer.start();
+    if (values.size())
+        i = values.back() + 1;
+    for (; i <= value; i++) {
+        if (!is_prime(i))
+            continue;
+        values.push_back(i);
+        uint64_t time_ns = timer.finish();
+        times.push_back(time_ns);
     }
 }
 
 
-void Primes::expand_to(int value) {
-    while (values.back() < value) {
-        int n = ++last_n;
-        add(n, -1);
-        add(n, +1);
+void Primes::print_time() {
+    std::cout << std::endl;
+    for (int i = 0; i < times.size(); i++) {
+        if (!times[i])
+            continue;
+        std::cout << std::setw(4) << values[i] << " : ";
+        Timer::print(times[i]);
+        std::cout << std::endl;
     }
 }
 
@@ -136,7 +129,7 @@ bool Primes::print(int* i, int limit) {
         int prime = values[*i];
         if (prime > limit)
             return true;
-        std::cout << ", " << prime;
+        std::cout << prime << " ";
         if (prime == limit)
             return true;
         (*i)++;
@@ -145,7 +138,7 @@ bool Primes::print(int* i, int limit) {
 }
 
 
-void Time::print() {
+void Timer::print(uint64_t time_ns) {
     int ns = time_ns % 1000;
     int us = (time_ns / 1000) % 1000;
     int ms = (time_ns / (int)1e6) % 1000;
